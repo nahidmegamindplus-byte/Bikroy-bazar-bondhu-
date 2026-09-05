@@ -1,0 +1,334 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(uuid())
+  name           String
+  email          String?   @unique
+  phone          String    @unique
+  passwordHash   String
+  role           String    @default("USER") // USER, BUSINESS_SELLER, MODERATOR, ADMIN
+  avatar         String?
+  isVerified     Boolean   @default(false)
+  phoneVerified  Boolean   @default(true)
+  businessName   String?
+  businessLogo   String?
+  businessDesc   String?
+  businessAddress String?
+  memberSince    DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  ads            Ad[]
+  favorites      Favorite[]
+  buyerConvs     Conversation[] @relation("BuyerConversations")
+  sellerConvs    Conversation[] @relation("SellerConversations")
+  messages       Message[]
+  reviewsGiven   Review[]       @relation("Reviewer")
+  reviewsReceived Review[]      @relation("SellerReviews")
+  reports        Report[]
+  payments       Payment[]
+  promotions     Promotion[]
+  notifications  Notification[]
+  savedSearches  SavedSearch[]
+}
+
+model Category {
+  id          String          @id @default(uuid())
+  name        String
+  nameBn      String
+  slug        String          @unique
+  icon        String?
+  description String?
+  order       Int             @default(0)
+  parentId    String?
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  parent      Category?       @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Category[]      @relation("CategoryHierarchy")
+  fields      CategoryField[]
+  ads         Ad[]            @relation("CategoryAds")
+  subCategoryAds Ad[]         @relation("SubCategoryAds")
+}
+
+model CategoryField {
+  id         String   @id @default(uuid())
+  categoryId String
+  name       String
+  nameBn     String
+  fieldKey   String
+  fieldType  String   // text, number, select, multiselect, boolean
+  isRequired Boolean  @default(false)
+  unit       String?
+  optionsJson String? // JSON array of options e.g. ["Petrol", "Diesel", "CNG", "Hybrid", "Electric"]
+  order      Int      @default(0)
+
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+model Location {
+  id        String     @id @default(uuid())
+  name      String
+  nameBn    String
+  slug      String     @unique
+  type      String     // DIVISION, DISTRICT, UPAZILA, AREA
+  parentId  String?
+  lat       Float?
+  lng       Float?
+  order     Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  parent    Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Location[] @relation("LocationHierarchy")
+  divisionAds Ad[]     @relation("DivisionAds")
+  districtAds Ad[]     @relation("DistrictAds")
+  areaAds     Ad[]     @relation("AreaAds")
+}
+
+model Ad {
+  id              String        @id @default(uuid())
+  title           String
+  slug            String
+  description     String
+  price           Float
+  isNegotiable    Boolean       @default(false)
+  condition       String        @default("USED") // NEW, USED, REFURBISHED
+  status          String        @default("APPROVED") // DRAFT, PENDING, APPROVED, REJECTED, EXPIRED, SOLD
+  rejectionReason String?
+  isFeatured      Boolean       @default(false)
+  isTop           Boolean       @default(false)
+  isUrgent        Boolean       @default(false)
+  isBumped        Boolean       @default(false)
+  viewsCount      Int           @default(0)
+  phoneViewsCount Int           @default(0)
+  sellerPhone     String
+  showPhone       Boolean       @default(true)
+  address         String?
+  
+  divisionId      String?
+  districtId      String?
+  areaId          String?
+  categoryId      String
+  subcategoryId   String?
+  userId          String
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  division        Location?     @relation("DivisionAds", fields: [divisionId], references: [id])
+  district        Location?     @relation("DistrictAds", fields: [districtId], references: [id])
+  area            Location?     @relation("AreaAds", fields: [areaId], references: [id])
+  category        Category      @relation("CategoryAds", fields: [categoryId], references: [id])
+  subcategory     Category?     @relation("SubCategoryAds", fields: [subcategoryId], references: [id])
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  images          AdImage[]
+  attributes      AdAttribute[]
+  favorites       Favorite[]
+  conversations   Conversation[]
+  reviews         Review[]
+  reports         Report[]
+  promotions      Promotion[]
+  payments        Payment[]
+}
+
+model AdImage {
+  id        String   @id @default(uuid())
+  adId      String
+  url       String
+  isCover   Boolean  @default(false)
+  order     Int      @default(0)
+
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+}
+
+model AdAttribute {
+  id       String @id @default(uuid())
+  adId     String
+  fieldKey String
+  value    String
+
+  ad       Ad     @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, fieldKey])
+}
+
+model PromotionPackage {
+  id           String      @id @default(uuid())
+  name         String
+  nameBn       String
+  slug         String      @unique
+  type         String      // FEATURED_AD, TOP_AD, URGENT_BADGE, HOMEPAGE_SPOTLIGHT, BUMP_UP
+  durationDays Int
+  price        Float
+  description  String
+  featuresJson String      // JSON array of feature bullets
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+
+  promotions   Promotion[]
+}
+
+model Promotion {
+  id         String           @id @default(uuid())
+  adId       String
+  packageId  String
+  userId     String
+  startDate  DateTime         @default(now())
+  endDate    DateTime
+  status     String           @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  createdAt  DateTime         @default(now())
+
+  ad         Ad               @relation(fields: [adId], references: [id], onDelete: Cascade)
+  package    PromotionPackage @relation(fields: [packageId], references: [id])
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments   Payment[]
+}
+
+model Payment {
+  id            String     @id @default(uuid())
+  userId        String
+  promotionId   String?
+  adId          String?
+  transactionId String     @unique
+  method        String     // BKASH, NAGAD, ROCKET, CARD
+  amount        Float
+  status        String     @default("PAID") // PENDING, PAID, FAILED, REFUNDED
+  gatewayRef    String?
+  purpose       String     @default("AD_PROMOTION")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promotion     Promotion? @relation(fields: [promotionId], references: [id])
+  ad            Ad?        @relation(fields: [adId], references: [id])
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  adId      String
+  buyerId   String
+  sellerId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  ad        Ad        @relation(fields: [adId], references: [id], onDelete: Cascade)
+  buyer     User      @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller    User      @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Cascade)
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  senderId       String
+  text           String
+  imageUrl       String?
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  adId      String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, adId])
+}
+
+model SavedSearch {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  query       String?
+  filtersJson String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  reviewerId  String
+  sellerId    String
+  adId        String?
+  rating      Int      // 1 to 5
+  comment     String
+  reply       String?
+  status      String   @default("APPROVED") // PENDING, APPROVED, REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reviewer    User     @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  seller      User     @relation("SellerReviews", fields: [sellerId], references: [id], onDelete: Cascade)
+  ad          Ad?      @relation(fields: [adId], references: [id])
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  reporterId  String
+  adId        String
+  reason      String
+  description String?
+  status      String   @default("PENDING") // PENDING, RESOLVED, DISMISSED
+  createdAt   DateTime @default(now())
+
+  reporter    User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  ad          Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // MESSAGE, AD_STATUS, PRICE_DROP, PROMOTION, PAYMENT, SYSTEM
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Banner {
+  id          String   @id @default(uuid())
+  title       String
+  imageUrl    String
+  linkUrl     String?
+  position    String   // HOMEPAGE_HERO, CATEGORY_TOP, SIDEBAR
+  isActive    Boolean  @default(true)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model Page {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  title     String
+  titleBn   String
+  content   String
+  contentBn String
+  updatedAt DateTime @updatedAt
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+}
